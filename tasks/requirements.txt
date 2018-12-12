@@ -1,0 +1,4 @@
+celery==4.2.1
+logging2==0.1.2
+psycopg2-binary==2.7.6.1
+requests==2.18.4

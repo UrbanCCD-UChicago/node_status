@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+  <meta content="utf-8" http-equiv="encoding">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.4/dist/leaflet.css" integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
+    crossorigin="" />
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+  <script src="https://unpkg.com/leaflet@1.3.4/dist/leaflet.js" integrity="sha512-nMMmRyTVoLYqjP9hrbed9S+FzjZHW5gY1TWCHA5ckwXZBadntCNs8kEqAWdrb9O7rxbCaA4lKTIWjDXZxflOcA=="
+    crossorigin=""></script>
+
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+
+    #map {
+      min-height: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <script>
+    var mymap = L.map('map').setView([41.88, -87.67], 12);
+    L.tileLayer(
+      'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}', {
+        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+        maxZoom: 18,
+        id: 'mapbox.light',
+        accessToken: 'pk.eyJ1IjoidmZvcmdpb25lLXVjY2QiLCJhIjoiY2pwbHEwbHFwMDMyOTQ0cmczNnB2OTF0byJ9.GoxEA4ZXPQlHU25TPi54vA'
+      }).addTo(mymap);
+
+    $.getJSON("http://localhost:5000/status.geojson", function (data) {
+      var datalayer = L.geoJson(data, {
+        pointToLayer: function (f, latlon) {
+          return L.circleMarker(latlon, { radius: 6, weight: 1, opacity: 1, fillOpacity: 0.6 });
+        },
+        onEachFeature: function (f, featureLayer) {
+          let popup = `<strong>Node VSN:</strong> ${f.properties.vsn}<br>` +
+            `<strong>Address:</strong> ${f.properties.address}<br>` +
+            `<strong>Status:</strong> ${f.properties.status}<br><hr>` +
+            `<strong>Project ID:</strong> ${f.properties.project_id}<br>` +
+            `<strong>Description:</strong> ${f.properties.description}<br>` +
+            `<strong>Commissioned On:</strong> ${f.properties.start_timestamp}<br>`;
+          
+          if (f.properties.end_timestamp !== null) { 
+            popup += `<strong>Decommissioned On:</strong> ${f.properties.end_timestamp}<br>`;
+          }
+
+          popup += `<hr>` +
+            `<strong>Latest Observation:</strong> ${f.properties.latest_observation_timestamp}<br>` +
+            `<strong>Latest Boot Checkin:</strong> ${f.properties.latest_http_event_timestamp}<br>` +
+            `<strong>Unresponsive Since:</strong> ${f.properties.unresponsive_since}<br>`;
+
+          featureLayer.bindPopup(popup);
+        },
+        style: function (f) {
+          switch (f.properties.status) {
+            case 'Decommissioned': return {color: '#303030'};
+            case 'Unresponsive': return {color: '#ff0014'};
+            case 'Reporting live data': return {color: '#00cc00'};
+            case 'Alive but not reporting': return {color: '#ffeb00'};
+            case 'Unknown': return {color: '#ff6b00'};
+          }
+        }
+      }).addTo(mymap);
+      mymap.fitBounds(datalayer.getBounds());
+    });
+  </script>
+</body>
+
+</html>
