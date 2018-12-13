@@ -5,7 +5,9 @@ and combines it into a simple reporting system. The aggregated
 data is then made available for consumption via CSV, JSON, or
 GeoJSON export. There is also an interactive Map UI.
 
-![node locations](./docs/locations.png "Node Locations") ![node info popup](./docs/node-info.png "Node Info Popup")
+<!-- ![node locations](./docs/locations.png "Node Locations") ![node info popup](./docs/node-info.png "Node Info Popup") -->
+
+<iframe src="https://aot-status.plenar.io/" style="height:500px;width:500px;"></iframe>
 
 ## Local Development
 
