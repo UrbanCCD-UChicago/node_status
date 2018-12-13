@@ -1,2 +1,0 @@
-var/lib/postgresql/data/*
-!var/lib/postgresql/data/.gitkeep

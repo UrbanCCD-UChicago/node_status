@@ -4,6 +4,9 @@ networks:
   node_status:
     name: node_status
 
+volumes:
+  postgres:
+
 services:
   rabbitmq:
     env_file: docker.env
@@ -20,7 +23,7 @@ services:
     build: postgres/
     restart: always
     volumes:
-      - postgres/var/lib/postgresql/data:/var/lib/postgresql/data
+      - postgres:/var/lib/postgresql/data
     ports:
       - 5432:5432
     networks:
@@ -40,6 +43,8 @@ services:
     build: web/
     env_file: docker.env
     restart: always
+    volumes:
+      - ./web:/app
     ports:
       - 5000:5000
     networks:

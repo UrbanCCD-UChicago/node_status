@@ -1,81 +1,163 @@
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
   <meta content="utf-8" http-equiv="encoding">
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.4/dist/leaflet.css" integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
-    crossorigin="" />
-
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.4/dist/leaflet.css" integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA==" crossorigin="" />
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-
-  <script src="https://unpkg.com/leaflet@1.3.4/dist/leaflet.js" integrity="sha512-nMMmRyTVoLYqjP9hrbed9S+FzjZHW5gY1TWCHA5ckwXZBadntCNs8kEqAWdrb9O7rxbCaA4lKTIWjDXZxflOcA=="
-    crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet@1.3.4/dist/leaflet.js" integrity="sha512-nMMmRyTVoLYqjP9hrbed9S+FzjZHW5gY1TWCHA5ckwXZBadntCNs8kEqAWdrb9O7rxbCaA4lKTIWjDXZxflOcA==" crossorigin=""></script>
 
   <style>
-    html,
-    body {
-      height: 100%;
-      margin: 0;
-    }
-
-    #map {
-      min-height: 100%;
-    }
+    html, body { height: 100%; margin: 0; }
+    th { text-align: left; }
+    td { text-align: right; }
+    #map { min-height: 100%; }
+    .count-box { padding:5px 10px; background: rgba(0, 0, 0, 0.5); color: #fff; font-size: 1.1em; border-radius: 5px; }
+    .count-box:empty { display: none; }
   </style>
 </head>
 
 <body>
   <div id="map"></div>
 
+  <!-- load up the node status geojson -->
   <script>
-    var mymap = L.map('map').setView([41.88, -87.67], 12);
+    // get the map div
+    const myMap = L.map('map');
+    
+    // setup the tiles
     L.tileLayer(
       'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}', {
-        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
-        maxZoom: 18,
-        id: 'mapbox.light',
-        accessToken: 'pk.eyJ1IjoidmZvcmdpb25lLXVjY2QiLCJhIjoiY2pwbHEwbHFwMDMyOTQ0cmczNnB2OTF0byJ9.GoxEA4ZXPQlHU25TPi54vA'
-      }).addTo(mymap);
+      attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+      maxZoom: 18,
+      id: 'mapbox.dark',
+      accessToken: 'pk.eyJ1IjoidmZvcmdpb25lLXVjY2QiLCJhIjoiY2pwbHEwbHFwMDMyOTQ0cmczNnB2OTF0byJ9.GoxEA4ZXPQlHU25TPi54vA'
+    }).addTo(myMap);
 
+    // we're going to create a custom control that acts as a legend for the node
+    // indicators. the count box is the control and it will later have its
+    // innerHTML set as the counts of the status of the nodes.
+    const CountBox = L.Control.extend({
+      options: {
+        position: 'topright'
+      },
+      onAdd: function (map) {
+        return L.DomUtil.create('div', 'count-box');
+      },
+      setContent: function (content) {
+        this.getContainer().innerHTML = content;
+      }
+    });
+
+    let countBox = new CountBox().addTo(myMap);
+    let counts = {decomm: 0, unresp: 0, reporting: 0, alive: 0, unknown: 0};
+
+    // get the geojson response and process each feature
     $.getJSON("http://localhost:5000/status.geojson", function (data) {
-      var datalayer = L.geoJson(data, {
+      let datalayer = L.geoJson(data, {
+
+        // instead of using markers, which are static images in leaflet, we're going
+        // to conver the points to layers so we can idicate them with circle
+        // markers. this allows us to style them -- essentially color code them for
+        // easier visual grepping of system status.
         pointToLayer: function (f, latlon) {
           return L.circleMarker(latlon, { radius: 6, weight: 1, opacity: 1, fillOpacity: 0.6 });
         },
-        onEachFeature: function (f, featureLayer) {
-          let popup = `<strong>Node VSN:</strong> ${f.properties.vsn}<br>` +
-            `<strong>Address:</strong> ${f.properties.address}<br>` +
-            `<strong>Status:</strong> ${f.properties.status}<br><hr>` +
-            `<strong>Project ID:</strong> ${f.properties.project_id}<br>` +
-            `<strong>Description:</strong> ${f.properties.description}<br>` +
-            `<strong>Commissioned On:</strong> ${f.properties.start_timestamp}<br>`;
-          
-          if (f.properties.end_timestamp !== null) { 
-            popup += `<strong>Decommissioned On:</strong> ${f.properties.end_timestamp}<br>`;
-          }
 
-          popup += `<hr>` +
-            `<strong>Latest Observation:</strong> ${f.properties.latest_observation_timestamp}<br>` +
-            `<strong>Latest Boot Checkin:</strong> ${f.properties.latest_http_event_timestamp}<br>` +
-            `<strong>Unresponsive Since:</strong> ${f.properties.unresponsive_since}<br>`;
-
-          featureLayer.bindPopup(popup);
-        },
+        // this sets the style of the circle marker
         style: function (f) {
           switch (f.properties.status) {
-            case 'Decommissioned': return {color: '#303030'};
-            case 'Unresponsive': return {color: '#ff0014'};
-            case 'Reporting live data': return {color: '#00cc00'};
-            case 'Alive but not reporting': return {color: '#ffeb00'};
-            case 'Unknown': return {color: '#ff6b00'};
+            case 'Unresponsive': return { color: '#ff0014' }; // red
+            case 'Reporting live data': return { color: '#00cc00' }; // green
+            case 'Alive but not reporting': return { color: '#ffeb00' };  // yellow
+            case 'Unknown': return { color: '#ff6b00' }; // orange
+          }
+        },
+
+        // this is where we process each feature: set up popup text, update the
+        // status counts, etc.
+        onEachFeature: function (f, featureLayer) {
+          console.log(`${f.properties.vsn}: ${f.properties.status}`);
+
+          // setup the popup text for each marker's onClick event
+          let popup = `
+          <strong>Node VSN:</strong> ${f.properties.vsn}<br>
+          <strong>Address:</strong> ${f.properties.address}<br>
+          <strong>Status:</strong> ${f.properties.status}<br>
+          <hr>
+          <strong>Project ID:</strong> ${f.properties.project_id}<br>
+          <strong>Description:</strong> ${f.properties.description}<br>
+          <strong>Commissioned On:</strong> ${f.properties.start_timestamp}<br>
+          <hr>
+          <strong>Latest Observation:</strong> ${f.properties.latest_observation_timestamp}<br>
+          <strong>Latest Boot Check In:</strong> [${f.properties.boot_media}] ${f.properties.latest_http_event_timestamp}<br>
+          <strong>Unresponsive Since:</strong> ${f.properties.unresponsive_since}<br>
+          <hr>
+          <a href="/last-hour/${f.properties.vsn}.csv" target="_blank">Export the last recorded hour of observations for node ${f.properties.vsn}</a><br>
+          <em>Note that if the node is not fully functional, the document may be empty or have data older than an hour from now. The export is the last hour of recoded observations for node from its latest observable timestamp.</em>
+          `;
+
+          // bind the text
+          featureLayer.bindPopup(popup);
+
+          // update the status counts
+          switch (f.properties.status) {
+            case 'Unresponsive': counts.unresp += 1; break;
+            case 'Reporting live data': counts.reporting += 1; break;
+            case 'Alive but not reporting': counts.alive += 1; break;
+            case 'Unknown': counts.unknown += 1; break;
           }
         }
-      }).addTo(mymap);
-      mymap.fitBounds(datalayer.getBounds());
+      }).addTo(myMap);
+
+      // setup the text for the counts box and set it as the innerHTML
+      let content = `
+      <table>
+        <tbody>
+          <tr>
+            <td style="color: #00cc00;">&#9673;</td>
+            <th>Reporting live data:</th>
+            <td>${counts.reporting}</td>
+          </tr>
+          <tr>
+            <td style="color: #ffeb00;">&#9673;</td>
+            <th>Alive but not reporting:</th>
+            <td>${counts.alive}</td>
+          </tr>
+          <tr>
+            <td style="color: #ff0014;">&#9673;</td>
+            <th>Unresponsive:</th>
+            <td>${counts.unresp}</td>
+          </tr>
+          <tr>
+            <td style="color: #ff6b00;">&#9673;</td>
+            <th>Unknown:</th>
+            <td>${counts.unknown}</td>
+          </tr>
+          <tr>
+            <td>&nbsp;</td>
+            <th>Total Nodes:</th>
+            <td>${counts.reporting + counts.alive + counts.unresp + counts.unknown}</td>
+          </tr>
+        </tbody>
+      </table>
+      `;
+      countBox.setContent(content);
+      
+      // finally, fit the bounds of the map to the data instead of using a hard
+      // coded centroid and zoom.
+      myMap.fitBounds(datalayer.getBounds());
+    });
+  </script>
+
+  <!-- reload every 10 minutes -->
+  <script>
+    $(document).ready(function () {
+      setTimeout(function () {
+        window.location.reload();
+      }, 1000 * 60 * 10);
     });
   </script>
 </body>
-
 </html>

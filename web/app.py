@@ -31,27 +31,27 @@ def _get_status():
     cursor.execute(
         """
         SELECT
-          n.node_id,
-          vsn,
-          project_id,
-          lon,
-          lat,
-          address,
-          description,
-          start_timestamp,
-          end_timestamp,
-          lo.timestamp as latest_observation_timestamp,
-          nhe.timestamp as latest_http_event_timestamp,
-          boot_id,
-          boot_media,
-          un.timestamp as unresponsive_since
+            n.node_id,
+            vsn,
+            project_id,
+            lon,
+            lat,
+            address,
+            description,
+            start_timestamp,
+            end_timestamp,
+            lo.timestamp as latest_observation_timestamp,
+            nhe.timestamp as latest_http_event_timestamp,
+            boot_id,
+            boot_media,
+            un.timestamp as unresponsive_since
         FROM
-          nodes n
-          LEFT JOIN latest_observation_per_node lo ON n.node_id = lo.node_id
-          LEFT JOIN node_http_events nhe ON n.node_id = nhe.node_id
-          LEFT JOIN unresponsive_nodes un ON n.node_id = un.node_id
+            nodes n
+            LEFT JOIN latest_observation_per_node lo ON n.node_id = lo.node_id
+            LEFT JOIN node_http_events nhe ON n.node_id = nhe.node_id
+            LEFT JOIN unresponsive_nodes un ON n.node_id = un.node_id
         ORDER BY
-          vsn ASC
+            vsn ASC
         """)
     rows = cursor.fetchall()
     conn.commit()
@@ -102,6 +102,9 @@ def status_json():
 def status_geojson():
     data = []
     for obj in _get_status():
+        if obj["status"] == "Decommissioned":
+            continue
+        
         lon = obj.pop("lon")
         lat = obj.pop("lat")
         data.append({
@@ -112,6 +115,7 @@ def status_geojson():
             },
             "properties": obj
         })
+    
     return jsonify(data)
 
 
@@ -119,6 +123,45 @@ def status_geojson():
 def index():
     return send_file("index.html")
 
+
+@app.route("/last-hour/<vsn>.csv")
+def last_hour(vsn):
+    cursor.execute(
+        """
+        SELECT
+            l.node_id,
+            timestamp,
+            subsystem,
+            sensor,
+            parameter,
+            value_raw,
+            value_hrf
+        FROM
+            node_last_hour l
+            LEFT JOIN nodes n ON n.node_id = l.node_id
+        WHERE
+            n.vsn = %s
+        ORDER BY
+            timestamp DESC,
+            subsystem ASC,
+            sensor ASC,
+            parameter ASC
+        """, (vsn,))
+    
+    headers = ["node_id", "timestamp", "subsystem", "sensor", "parameter", "value_raw", "value_hrf"]
+    rows = [dict(zip(headers, row)) for row in cursor.fetchall()]
+    
+    conn.commit()
+
+    si = StringIO()
+    writer = csv.DictWriter(si, rows[0].keys())
+    writer.writeheader()
+    writer.writerows(rows)
+    resp = make_response(si.getvalue())
+    now = datetime.now().strftime("%Y-%m-%d.%H-%M-%S")
+    resp.headers["Content-Disposition"] = f"attachment; filename={vsn}-last-hour-{now}.csv"
+    resp.headers["Content-type"] = "text/csv"
+    return resp
 
 if __name__ == "__main__":
     app.run(debug=_cfg.DEBUG, host="0.0.0.0")
