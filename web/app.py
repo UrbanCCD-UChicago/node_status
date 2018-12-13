@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from io import StringIO
 
 import psycopg2
-from flask import Flask, jsonify, make_response
+from flask import Flask, jsonify, make_response, send_file
 from flask_cors import CORS
 from logging2 import Logger
 
@@ -113,6 +113,11 @@ def status_geojson():
             "properties": obj
         })
     return jsonify(data)
+
+
+@app.route("/")
+def index():
+    return send_file("index.html")
 
 
 if __name__ == "__main__":
