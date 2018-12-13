@@ -1,0 +1,53 @@
+version: "3.5"
+
+networks:
+  node_status:
+    name: node_status
+
+volumes:
+  postgres:
+
+services:
+  rabbitmq:
+    env_file: docker-prod.env
+    image: rabbitmq:3-management
+    restart: always
+    networks: 
+      - node_status
+    ports:
+      - 5672:5672
+      - 15672:15672
+
+  postgres:
+    env_file: docker-prod.env
+    build: postgres/
+    restart: always
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    networks:
+      - node_status
+
+  tasks:
+    env_file: docker-prod.env
+    build: tasks/
+    restart: always
+    networks:
+      - node_status
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  web:
+    build: web/
+    env_file: docker-prod.env
+    restart: always
+    volumes:
+      - ./web:/app
+    ports:
+      - 5000:5000
+    networks:
+      - node_status
+    depends_on:
+      - postgres
