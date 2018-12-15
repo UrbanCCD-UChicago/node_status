@@ -12,12 +12,75 @@ from logging2 import Logger
 from config import Config
 
 
+BASE_QUERY = """
+WITH q0 AS (
+    SELECT node_id, max(timestamp) AS latest_observation_timestamp
+    FROM observations
+    GROUP BY node_id
+),
+q1 AS (
+    SELECT
+        n.node_id,
+        vsn,
+        project_id,
+        lon,
+        lat,
+        address,
+        description,
+        start_timestamp,
+        end_timestamp,
+        b.timestamp AS latest_boot_timestamp,
+        boot_id,
+        boot_media,
+        r.timestamp AS latest_rssh_timestamp,
+        port
+    FROM
+        nodes n
+        LEFT JOIN boot_events b ON b.node_id = n.node_id
+        LEFT JOIN rssh_ports r ON r.node_id = n.node_id
+),
+q2 AS (
+    SELECT q1.*, q0.latest_observation_timestamp
+    FROM q1 LEFT JOIN q0 ON q0.node_id = q1.node_id
+)
+SELECT
+    *,
+    CASE
+        WHEN latest_observation_timestamp >= (NOW() - interval '24 hours') 
+            THEN 'green'
+        WHEN latest_boot_timestamp >= (NOW() - interval '24 hours')
+            AND latest_rssh_timestamp >= (NOW() - interval '24 hours')
+            THEN 'blue'
+        WHEN latest_rssh_timestamp >= (NOW() - interval '24 hours')
+            THEN 'yellow'
+        WHEN latest_boot_timestamp >= (NOW() - interval '24 hours')
+            THEN 'orange'
+        ELSE 'red'
+    END AS status
+FROM q2
+ORDER BY vsn ASC
+"""
+
+EXPORT_QUERY = """
+SELECT o.*
+FROM observations o
+    LEFT JOIN nodes n ON n.node_id = o.node_id
+WHERE
+    n.vsn = %s
+ORDER BY
+    timestamp DESC,
+    subsystem ASC,
+    sensor ASC,
+    parameter ASC
+"""
+
+
 _cfg = Config()
 
 conn = psycopg2.connect(_cfg.get_pg_dsn())
 cursor = conn.cursor()
 
-logger = Logger("webapp", level=_cfg.LL)
+logger = Logger("web", level=_cfg.LL)
 
 app = Flask(__name__)
 app.config.from_object(_cfg)
@@ -25,58 +88,15 @@ CORS(app)
 
 
 def _get_status():
-    headers = "node_id vsn project_id lon lat address description start_timestamp end_timestamp latest_observation_timestamp " \
-        "latest_http_event_timestamp boot_id boot_media unresponsive_since".split(" ")
-    
-    cursor.execute(
-        """
-        SELECT
-            n.node_id,
-            vsn,
-            project_id,
-            lon,
-            lat,
-            address,
-            description,
-            start_timestamp,
-            end_timestamp,
-            lo.timestamp as latest_observation_timestamp,
-            nhe.timestamp as latest_http_event_timestamp,
-            boot_id,
-            boot_media,
-            un.timestamp as unresponsive_since
-        FROM
-            nodes n
-            LEFT JOIN latest_observation_per_node lo ON n.node_id = lo.node_id
-            LEFT JOIN node_http_events nhe ON n.node_id = nhe.node_id
-            LEFT JOIN unresponsive_nodes un ON n.node_id = un.node_id
-        ORDER BY
-            vsn ASC
-        """)
+    headers = "node_id vsn project_id lon lat address description start_timestamp " \
+        "end_timestamp latest_boot_timestamp boot_id boot_media latest_rssh_timestamp " \
+        "port latest_observation_timestamp status".split(" ")
+
+    cursor.execute(BASE_QUERY)
     rows = cursor.fetchall()
     conn.commit()
-    
-    now = datetime.now()
-    tolerance = timedelta(hours=6)
 
-    nodes = [dict(zip(headers, row)) for row in rows]
-    for node in nodes:
-        if node["end_timestamp"] is not None:
-            node["status"] = "Decommissioned"
-        
-        elif node["unresponsive_since"] is not None:
-            node["status"] = "Unresponsive"
-        
-        elif node["latest_observation_timestamp"] is not None and now - node["latest_observation_timestamp"] <= tolerance:
-            node["status"] = "Reporting live data"
-        
-        elif node["latest_http_event_timestamp"] is not None and now - node["latest_http_event_timestamp"] <= tolerance:
-            node["status"] = "Alive but not reporting"
-
-        else:
-            node["status"] = "Unknown"
-    
-    return nodes
+    return [dict(zip(headers, row)) for row in rows]
 
 
 @app.route("/status.csv")
@@ -102,7 +122,7 @@ def status_json():
 def status_geojson():
     data = []
     for obj in _get_status():
-        if obj["status"] == "Decommissioned":
+        if obj["end_timestamp"]:
             continue
         
         lon = obj.pop("lon")
@@ -126,31 +146,10 @@ def index():
 
 @app.route("/last-hour/<vsn>.csv")
 def last_hour(vsn):
-    cursor.execute(
-        """
-        SELECT
-            l.node_id,
-            timestamp,
-            subsystem,
-            sensor,
-            parameter,
-            value_raw,
-            value_hrf
-        FROM
-            node_last_hour l
-            LEFT JOIN nodes n ON n.node_id = l.node_id
-        WHERE
-            n.vsn = %s
-        ORDER BY
-            timestamp DESC,
-            subsystem ASC,
-            sensor ASC,
-            parameter ASC
-        """, (vsn,))
-    
+    cursor.execute(EXPORT_QUERY, (vsn,))
     headers = ["node_id", "timestamp", "subsystem", "sensor", "parameter", "value_raw", "value_hrf"]
     rows = [dict(zip(headers, row)) for row in cursor.fetchall()]
-    
+
     conn.commit()
 
     si = StringIO()
@@ -162,6 +161,7 @@ def last_hour(vsn):
     resp.headers["Content-Disposition"] = f"attachment; filename={vsn}-last-hour-{now}.csv"
     resp.headers["Content-type"] = "text/csv"
     return resp
+
 
 if __name__ == "__main__":
     app.run(debug=_cfg.DEBUG, host="0.0.0.0")

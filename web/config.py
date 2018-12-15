@@ -7,7 +7,7 @@ class __BaseConfig:
     pg_port   = os.environ.get('POSTGRES_PORT',     '5432')
     pg_user   = os.environ.get('POSTGRES_USER',     'postgres')
     pg_pass   = os.environ.get('POSTGRES_PASSWORD', 'postgres')
-    pg_dbname = os.environ.get('POSTGRES_DB',       'postgres')
+    pg_dbname = os.environ.get('POSTGRES_DB',       'node_status')
 
     rmq_host  = os.environ.get('RABBITMQ_HOST',          'localhost')
     rmq_port  = os.environ.get('RABBITMQ_PORT',          '5672')
