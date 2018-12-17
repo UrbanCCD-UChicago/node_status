@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+# why aren't the timestamps set to UTC in AoT data?
+import os
+import time
+os.environ['TZ'] = 'America/Chicago'
+time.tzset()
+
 import csv
 from datetime import datetime, timedelta
 from io import StringIO

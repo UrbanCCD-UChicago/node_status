@@ -18,10 +18,10 @@ app.conf.beat_schedule = {
     },
     'load_boot_events': {
         'task': 'load_boot_events.load_boot_events',
-        'schedule': timedelta(minutes=20)
+        'schedule': timedelta(minutes=5)
     },
     'load_rssh_ports': {
         'task': 'load_rssh_ports.load_rssh_ports',
-        'schedule': timedelta(minutes=20)
+        'schedule': timedelta(minutes=5)
     }
 }
