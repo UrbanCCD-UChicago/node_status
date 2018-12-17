@@ -8,6 +8,7 @@ import os.path
 import shutil
 import tarfile
 
+import arrow
 import psycopg2
 import requests
 from logging2 import Logger, LogLevel
@@ -75,7 +76,7 @@ def run():
     with codecs.open(download_filename, 'r', encoding='utf8') as fh:
         reader = csv.DictReader(fh)
         for row in reader:
-            row['timestamp'] = arrow.get(row['timestamp']).datetime
+            row['timestamp'] = row['timestamp']
             node_id = row.pop('node_id')
             if node_id not in node_ids:
                 logger.warning(f'{node_id} not present in nodes table')
@@ -86,6 +87,7 @@ def run():
     
     for node_id, row in boots.items():
         row['node_id'] = node_id
+        row['timestamp'] = arrow.get(row['timestamp']).datetime
         logger.debug(f'{row}')
         try:
             cursor.execute(UPSERT_BOOT_EVENT, row)

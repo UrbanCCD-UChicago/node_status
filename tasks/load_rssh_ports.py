@@ -88,7 +88,7 @@ def run():
                     if time:
                         timestamp = arrow.get(
                             f'{date.today().isoformat()} {time} America/Chicago',
-                            'YYYY-MM-DD HH:mm ZZZZ').datetime
+                            'YYYY-MM-DD HH:mm ZZZ').datetime
                         logger.debug(f'timestamp set to {timestamp}')
                         continue
                     else:

@@ -4,6 +4,7 @@ import csv
 from datetime import datetime, timedelta
 from io import StringIO
 
+import arrow
 import psycopg2
 from flask import Flask, jsonify, make_response, send_file
 from flask_cors import CORS
@@ -96,7 +97,13 @@ def _get_status():
     rows = cursor.fetchall()
     conn.commit()
 
-    return [dict(zip(headers, row)) for row in rows]
+    rows = [dict(zip(headers, row)) for row in rows]
+    for row in rows:
+        for key, value in row.items():
+            if isinstance(value, datetime):
+                row[key] = arrow.get(value).to('America/Chicago').format('YYYY-MM-DD HH:mm:ss Z')
+    
+    return rows
 
 
 @app.route("/status.csv")

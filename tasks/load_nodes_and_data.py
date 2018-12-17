@@ -95,11 +95,11 @@ def run():
     with codecs.open(nodes_filename, 'r', encoding='utf8') as fh:
         reader = csv.DictReader(fh)
         for row in reader:
-            row['start_timestamp'] = arrow.get(f'{row["start_timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZZ').datetime
+            row['start_timestamp'] = arrow.get(f'{row["start_timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
             if row['end_timestamp'] == '':
                 row['end_timestamp'] = None
             else:
-                row['end_timestamp'] = arrow.get(f'{row["end_timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZZ').datetime
+                row['end_timestamp'] = arrow.get(f'{row["end_timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
             logger.debug(f'{row}')
             cursor.execute(UPSERT_NODE, row)
 
@@ -121,7 +121,7 @@ def run():
     with codecs.open(data_filename, 'rb', encoding='utf8') as fh:
         reader = csv.DictReader(fh)
         for row in reader:
-            row['timestamp'] = arrow.get(f'{row["timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZZ').datetime
+            row['timestamp'] = arrow.get(f'{row["timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
             logger.debug(f'{row}')
             # the unique constraint on the row will prevent us
             # from trying to overwrite a ton on entries. the data
