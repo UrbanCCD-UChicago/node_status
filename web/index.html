@@ -55,7 +55,7 @@
     // let markers = {green: [], blue: [], yellow: [], orange: [], red: []};
 
     // get the geojson response and process each feature
-    $.getJSON("http://localhost:5000/status.geojson", function (data) {
+    $.getJSON("http://3.80.109.233/status.geojson", function (data) {
       let datalayer = L.geoJson(data, {
 
         // instead of using markers, which are static images in leaflet, we're going
@@ -98,18 +98,15 @@
           <strong>Node VSN:</strong> ${f.properties.vsn}<br>
           <strong>Node ID:</strong> ${f.properties.node_id}<br>
           <strong>Address:</strong> ${f.properties.address}<br>
-          <hr>
-          <strong>Project ID:</strong> ${f.properties.project_id}<br>
           <strong>Description:</strong> ${f.properties.description}<br>
-          <strong>Commissioned On:</strong> ${f.properties.start_timestamp}<br>
           <hr>
-          <strong>Latest Observation:</strong> ${f.properties.latest_observation_timestamp}<br>
+          <strong>Latest Observation Recorded At:</strong> ${f.properties.latest_observation_timestamp}<br>
           <hr>
-          <strong>Latest Boot Check In:</strong> ${f.properties.latest_boot_timestamp}<br>
+          <strong>Latest Boot Info Checked In At:</strong> ${f.properties.latest_boot_timestamp}<br>
           <strong>Boot ID:</strong> ${f.properties.boot_id}<br>
           <strong>Boot Media:</strong> ${f.properties.boot_media}<br>
           <hr>
-          <strong>Latest rSSH:</strong> ${f.properties.latest_rssh_timestamp}<br>
+          <strong>Latest rSSH Port Checked In At:</strong> ${f.properties.latest_rssh_timestamp}<br>
           <strong>rSSH Port:</strong> ${f.properties.port}<br>
           <hr>
           <a href="/last-hour/${f.properties.vsn}.csv" target="_blank">Export the last recorded hour of observations</a>.<br>

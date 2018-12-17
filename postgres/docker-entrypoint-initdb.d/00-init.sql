@@ -1,7 +1,5 @@
 \c node_status
 
-SET timezone TO 'America/Chicago';
-
 
 CREATE TABLE nodes (
   node_id         TEXT NOT NULL PRIMARY KEY ,
@@ -11,14 +9,14 @@ CREATE TABLE nodes (
   lat             FLOAT NULL ,
   address         TEXT NULL ,
   description     TEXT NULL ,
-  start_timestamp TIMESTAMPTZ NOT NULL ,
-  end_timestamp   TIMESTAMPTZ NULL
+  start_timestamp TIMESTAMP NOT NULL ,
+  end_timestamp   TIMESTAMP NULL
 ) ;
 
 
 CREATE TABLE observations (
   node_id         TEXT REFERENCES nodes ,
-  timestamp       TIMESTAMPTZ NOT NULL ,
+  timestamp       TIMESTAMP NOT NULL ,
   subsystem       TEXT NOT NULL ,
   sensor          TEXT NOT NULL ,
   parameter       TEXT NOT NULL ,
@@ -46,7 +44,7 @@ ON observations (parameter) ;
 
 CREATE TABLE boot_events (
   node_id         TEXT REFERENCES nodes UNIQUE ,
-  timestamp       TIMESTAMPTZ NOT NULL ,
+  timestamp       TIMESTAMP NOT NULL ,
   boot_id         TEXT NOT NULL ,
   boot_media      TEXT NOT NULL
 ) ;
@@ -57,7 +55,7 @@ ON boot_events (timestamp) ;
 
 CREATE TABLE rssh_ports (
   node_id         TEXT REFERENCES nodes UNIQUE ,
-  timestamp       TIMESTAMPTZ NOT NULL ,
+  timestamp       TIMESTAMP NOT NULL ,
   port            TEXT NOT NULL
 ) ;
 

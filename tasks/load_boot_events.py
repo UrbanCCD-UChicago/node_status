@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 
-# why aren't the timestamps set to UTC in AoT data?
-import os
-import time
-os.environ['TZ'] = 'America/Chicago'
-time.tzset()
-
 import codecs
 import csv
 import gzip
@@ -81,6 +75,7 @@ def run():
     with codecs.open(download_filename, 'r', encoding='utf8') as fh:
         reader = csv.DictReader(fh)
         for row in reader:
+            row['timestamp'] = arrow.get(row['timestamp']).datetime
             node_id = row.pop('node_id')
             if node_id not in node_ids:
                 logger.warning(f'{node_id} not present in nodes table')

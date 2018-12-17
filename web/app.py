@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 
-# why aren't the timestamps set to UTC in AoT data?
-import os
-import time
-os.environ['TZ'] = 'America/Chicago'
-time.tzset()
-
 import csv
 from datetime import datetime, timedelta
 from io import StringIO
 
-import arrow
 import psycopg2
 from flask import Flask, jsonify, make_response, send_file
 from flask_cors import CORS
@@ -103,15 +96,7 @@ def _get_status():
     rows = cursor.fetchall()
     conn.commit()
 
-    rows = [dict(zip(headers, row)) for row in rows]
-    for row in rows:
-        row['start_timestamp'] = arrow.get(row['start_timestamp']).to('America/Chicago')
-        row['end_timestamp'] = arrow.get(row['end_timestamp']).to('America/Chicago')
-        row['latest_boot_timestamp'] = arrow.get(row['latest_boot_timestamp']).to('America/Chicago')
-        row['latest_rssh_timestamp'] = arrow.get(row['latest_rssh_timestamp']).to('America/Chicago')
-        row['latest_observation_timestamp'] = arrow.get(row['latest_observation_timestamp']).to('America/Chicago')
-
-    return rows
+    return [dict(zip(headers, row)) for row in rows]
 
 
 @app.route("/status.csv")
@@ -139,7 +124,6 @@ def status_geojson():
     for obj in _get_status():
         if obj["end_timestamp"]:
             continue
-        
         lon = obj.pop("lon")
         lat = obj.pop("lat")
         data.append({

@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 
-# why aren't the timestamps set to UTC in AoT data?
-import os
-import time
-os.environ['TZ'] = 'America/Chicago'
-time.tzset()
-
 import codecs
 import csv
 import gzip
@@ -16,6 +10,7 @@ import shutil
 import tarfile
 from datetime import date, datetime
 
+import arrow
 import psycopg2
 import requests
 from logging2 import Logger, LogLevel
@@ -91,9 +86,9 @@ def run():
                 if m:
                     time = m.groupdict().get('time')
                     if time:
-                        timestamp = datetime.strptime(
-                            f'{date.today().isoformat()} {time}',
-                            '%Y-%m-%d %H:%M')
+                        timestamp = arrow.get(
+                            f'{date.today().isoformat()} {time} America/Chicago',
+                            'YYYY-MM-DD HH:mm ZZZZ').datetime
                         logger.debug(f'timestamp set to {timestamp}')
                         continue
                     else:
