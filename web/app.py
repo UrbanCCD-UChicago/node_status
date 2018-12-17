@@ -10,6 +10,7 @@ import csv
 from datetime import datetime, timedelta
 from io import StringIO
 
+import arrow
 import psycopg2
 from flask import Flask, jsonify, make_response, send_file
 from flask_cors import CORS
@@ -102,7 +103,15 @@ def _get_status():
     rows = cursor.fetchall()
     conn.commit()
 
-    return [dict(zip(headers, row)) for row in rows]
+    rows = [dict(zip(headers, row)) for row in rows]
+    for row in rows:
+        row['start_timestamp'] = arrow.get(row['start_timestamp']).to('America/Chicago')
+        row['end_timestamp'] = arrow.get(row['end_timestamp']).to('America/Chicago')
+        row['latest_boot_timestamp'] = arrow.get(row['latest_boot_timestamp']).to('America/Chicago')
+        row['latest_rssh_timestamp'] = arrow.get(row['latest_rssh_timestamp']).to('America/Chicago')
+        row['latest_observation_timestamp'] = arrow.get(row['latest_observation_timestamp']).to('America/Chicago')
+
+    return rows
 
 
 @app.route("/status.csv")
