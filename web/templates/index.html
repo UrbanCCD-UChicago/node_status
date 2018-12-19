@@ -23,6 +23,12 @@
 
   <!-- load up the node status geojson -->
   <script>
+    // setup the nav function
+    function selectProject() {
+        let x = document.getElementById("selectProject").value;
+        window.location.assign(`http://{{ hostname }}/${x}`);
+    }
+
     // get the map div
     const myMap = L.map('map');
 
@@ -141,6 +147,7 @@
 
       // setup the text for the counts box and set it as the innerHTML
       let content = `
+      <strong>Node Status Counts for Project {{ project_id }}</strong>
       <table>
         <tbody>
           <tr>
@@ -185,6 +192,15 @@
           </tr>
         </tbody>
       </table>
+
+      Switch to project
+      <select id="selectProject" onchange="selectProject()">
+        <option value="null"></option>
+        <option value="">All</option>
+        {% for proj in projects %}
+        <option value="{{ proj }}">{{ proj }}</option>
+        {% endfor %}
+      </select>
       `;
       countBox.setContent(content);
 

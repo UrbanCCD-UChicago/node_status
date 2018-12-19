@@ -118,3 +118,10 @@ ORDER BY
     sensor ASC,
     parameter ASC
 """
+
+
+PROJECT_IDS = """
+SELECT DISTINCT project_id
+FROM projects_nodes
+ORDER BY project_id ASC
+"""

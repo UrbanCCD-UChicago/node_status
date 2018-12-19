@@ -91,7 +91,10 @@ def status_geojson(project_id=ALL_PROJECTS):
 @app.route('/')
 @app.route('/<project_id>')
 def index(project_id=ALL_PROJECTS):
-    return render_template('index.html', project_id=project_id, hostname=_cfg.HOSTNAME)
+    cursor.execute(queries.PROJECT_IDS)
+    projects = [proj for (proj,) in cursor.fetchall()]
+    conn.commit()
+    return render_template('index.html', project_id=project_id, hostname=_cfg.HOSTNAME, projects=projects)
 
 
 @app.route('/export/<node_id>.csv')
