@@ -1,6 +1,10 @@
+import logging
 import os
 
-from logging2 import LogLevel
+logging_kwargs = {
+    'format': '%(asctime)s %(levelname)s: %(message)s',
+    'datefmt': '%Y-%m-%dT%H:%M:%S%z',
+}
 
 class __BaseConfig:
     pg_host   = os.environ.get('POSTGRES_HOST',     'localhost')
@@ -17,7 +21,7 @@ class __BaseConfig:
 
     def get_pg_dsn(self):
         return f"host='{self.pg_host}' port='{self.pg_port}' dbname='{self.pg_dbname}' user='{self.pg_user}' password='{self.pg_pass}'"
-    
+
     def get_rmq_dsn(self):
         return f"pyamqp://{self.rmq_user}:{self.rmq_pass}@{self.rmq_host}:{self.rmq_port}/{self.rmq_vhost}"
 
@@ -25,13 +29,15 @@ class __BaseConfig:
 class __DevConfig(__BaseConfig):
     DEBUG = True
     ENV = 'development'
-    LL = LogLevel.debug
+    HOSTNAME = 'localhost:5000'
+    logging.basicConfig(level=logging.DEBUG, **logging_kwargs)
 
 
 class __ProdConfig(__BaseConfig):
     DEBUG = False
     ENV = 'production'
-    LL = LogLevel.info
+    HOSTNAME = '3.80.109.233'
+    logging.basicConfig(level=logging.INFO, **logging_kwargs)
 
 
 if os.environ.get('MODE') == 'prod':

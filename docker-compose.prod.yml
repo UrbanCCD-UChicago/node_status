@@ -9,19 +9,19 @@ volumes:
 
 services:
   rabbitmq:
-    env_file: docker-prod.env
     image: rabbitmq:3-management
     restart: always
-    networks: 
+    env_file: prod.env
+    networks:
       - node_status
     ports:
       - 5672:5672
       - 15672:15672
 
   postgres:
-    env_file: docker-prod.env
     build: postgres/
     restart: always
+    env_file: prod.env
     volumes:
       - postgres:/var/lib/postgresql/data
     ports:
@@ -30,9 +30,11 @@ services:
       - node_status
 
   tasks:
-    env_file: docker-prod.env
     build: tasks/
     restart: always
+    env_file: prod.env
+    volumes:
+      - ./tasks:/app
     networks:
       - node_status
     depends_on:
@@ -41,8 +43,8 @@ services:
 
   web:
     build: web/
-    env_file: docker-prod.env
     restart: always
+    env_file: prod.env
     volumes:
       - ./web:/app
     ports:

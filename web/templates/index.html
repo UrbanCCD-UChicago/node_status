@@ -13,7 +13,7 @@
     th { text-align: left; }
     td { text-align: right; }
     #map { min-height: 100%; }
-    .count-box { padding:5px 10px; background: rgba(0, 0, 0, 0.5); color: #fff; font-size: 1.1em; border-radius: 5px; }
+    .count-box { padding:10px; background: rgba(255, 255, 255, 0.9); color: #000; font-size: 1.1em; border-radius: 5px; }
     .count-box:empty { display: none; }
   </style>
 </head>
@@ -25,7 +25,7 @@
   <script>
     // get the map div
     const myMap = L.map('map');
-    
+
     // setup the tiles
     L.tileLayer(
       'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}', {
@@ -51,11 +51,11 @@
     });
 
     let countBox = new CountBox().addTo(myMap);
-    let counts = {green: 0, blue: 0, yellow: 0, orange: 0, red: 0};
-    // let markers = {green: [], blue: [], yellow: [], orange: [], red: []};
+    let counts = {green: 0, blue: 0, yellow: 0, orange: 0, red: 0, gray: 0, black: 0};
+    // let markers = {green: [], blue: [], yellow: [], orange: [], red: [], gray: [], black: []};
 
     // get the geojson response and process each feature
-    $.getJSON("http://3.80.109.233/status.geojson", function (data) {
+    $.getJSON("http://{{ hostname }}/status/{{ project_id }}.geojson", function (data) {
       let datalayer = L.geoJson(data, {
 
         // instead of using markers, which are static images in leaflet, we're going
@@ -72,6 +72,8 @@
           //   case 'blue': markers.blue.push(mrk); break;
           //   case 'yellow': markers.yellow.push(mrk); break;
           //   case 'orange': markers.orange.push(mrk); break;
+          //   case 'gray': markers.gray.push(mrk); break;
+          //   case 'black': markers.black.push(mrk); break;
           // }
 
           return mrk;
@@ -85,6 +87,8 @@
             case 'blue': return { color: '#3399ff' };
             case 'yellow': return { color: '#ffeb00' };
             case 'orange': return { color: '#ff6b00' };
+            case 'gray': return { color: '#666666' };
+            case 'black': return { color: '#000000' };
           }
         },
 
@@ -97,8 +101,13 @@
           let popup = `
           <strong>Node VSN:</strong> ${f.properties.vsn}<br>
           <strong>Node ID:</strong> ${f.properties.node_id}<br>
+          <br>
+          <strong>Lon, Lat:</strong> ${f.geometry.coordinates}<br>
           <strong>Address:</strong> ${f.properties.address}<br>
           <strong>Description:</strong> ${f.properties.description}<br>
+          <br>
+          <strong>Start Timestamp:</strong> ${f.properties.start_timestamp}<br>
+          <strong>End Timestamp:</strong> ${f.properties.end_timestamp}<br>
           <hr>
           <strong>Latest Observation Recorded At:</strong> ${f.properties.latest_observation_timestamp}<br>
           <hr>
@@ -109,7 +118,7 @@
           <strong>Latest rSSH Port Checked In At:</strong> ${f.properties.latest_rssh_timestamp}<br>
           <strong>rSSH Port:</strong> ${f.properties.port}<br>
           <hr>
-          <a href="/last-hour/${f.properties.vsn}.csv" target="_blank">Export the last recorded hour of observations</a>.<br>
+          <a href="/export/${f.properties.node_id}.csv" target="_blank">Export the last recorded hour of observations</a>.<br>
           <p><em>Note that if the node is not fully functional, the document may be empty or have data older than an hour from
             now. The export is the last hour of recoded observations for node from its latest observable timestamp.</em></p>
           `;
@@ -124,6 +133,8 @@
             case 'yellow': counts.yellow += 1; break;
             case 'orange': counts.orange += 1; break;
             case 'red': counts.red += 1; break;
+            case 'gray': counts.gray += 1; break;
+            case 'black': counts.black += 1; break;
           }
         }
       }).addTo(myMap);
@@ -158,15 +169,25 @@
             <td>${counts.red}</td>
           </tr>
           <tr>
+            <td style="color:#666666;">&#9673;</td>
+            <th>Not Yet Commissioned:</th>
+            <td>${counts.gray}</td>
+          </tr>
+          <tr>
+            <td style="color:#000000;">&#9673;</td>
+            <th>Decommissioned:</th>
+            <td>${counts.black}</td>
+          </tr>
+          <tr>
             <td>&nbsp;</td>
             <th>Total Nodes:</th>
-            <td>${counts.green + counts.blue + counts.yellow + counts.orange + counts.red}</td>
+            <td>${counts.green + counts.blue + counts.yellow + counts.orange + counts.red + counts.gray + counts.black}</td>
           </tr>
         </tbody>
       </table>
       `;
       countBox.setContent(content);
-      
+
       // fit the bounds of the map to the data instead of using a hard
       // coded centroid and zoom.
       myMap.fitBounds(datalayer.getBounds());
@@ -177,6 +198,8 @@
       // const yellows = L.layerGroup(markers.yellow);
       // const oranges = L.layerGroup(markers.orange);
       // const reds = L.layerGroup(markers.red);
+      // const grays = L.layerGroup(markers.gray);
+      // const blacks = L.layerGroup(markers.black);
     });
   </script>
 

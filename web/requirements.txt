@@ -1,5 +1,4 @@
 Flask==1.0.2
 Flask-Cors==3.0.7
 arrow==0.12.1
-logging2==0.1.2
 psycopg2-binary==2.7.6.1

@@ -6,74 +6,11 @@ from io import StringIO
 
 import arrow
 import psycopg2
-from flask import Flask, jsonify, make_response, send_file
+from flask import Flask, jsonify, make_response, render_template
 from flask_cors import CORS
-from logging2 import Logger
 
+import queries
 from config import Config
-
-
-BASE_QUERY = """
-WITH q0 AS (
-    SELECT node_id, max(timestamp) AS latest_observation_timestamp
-    FROM observations
-    GROUP BY node_id
-),
-q1 AS (
-    SELECT
-        n.node_id,
-        vsn,
-        project_id,
-        lon,
-        lat,
-        address,
-        description,
-        start_timestamp,
-        end_timestamp,
-        b.timestamp AS latest_boot_timestamp,
-        boot_id,
-        boot_media,
-        r.timestamp AS latest_rssh_timestamp,
-        port
-    FROM
-        nodes n
-        LEFT JOIN boot_events b ON b.node_id = n.node_id
-        LEFT JOIN rssh_ports r ON r.node_id = n.node_id
-),
-q2 AS (
-    SELECT q1.*, q0.latest_observation_timestamp
-    FROM q1 LEFT JOIN q0 ON q0.node_id = q1.node_id
-)
-SELECT
-    *,
-    CASE
-        WHEN latest_observation_timestamp >= (NOW() - interval '24 hours') 
-            THEN 'green'
-        WHEN latest_boot_timestamp >= (NOW() - interval '24 hours')
-            AND latest_rssh_timestamp >= (NOW() - interval '24 hours')
-            THEN 'blue'
-        WHEN latest_rssh_timestamp >= (NOW() - interval '24 hours')
-            THEN 'yellow'
-        WHEN latest_boot_timestamp >= (NOW() - interval '24 hours')
-            THEN 'orange'
-        ELSE 'red'
-    END AS status
-FROM q2
-ORDER BY vsn ASC
-"""
-
-EXPORT_QUERY = """
-SELECT o.*
-FROM observations o
-    LEFT JOIN nodes n ON n.node_id = o.node_id
-WHERE
-    n.vsn = %s
-ORDER BY
-    timestamp DESC,
-    subsystem ASC,
-    sensor ASC,
-    parameter ASC
-"""
 
 
 _cfg = Config()
@@ -81,19 +18,24 @@ _cfg = Config()
 conn = psycopg2.connect(_cfg.get_pg_dsn())
 cursor = conn.cursor()
 
-logger = Logger("web", level=_cfg.LL)
-
 app = Flask(__name__)
 app.config.from_object(_cfg)
 CORS(app)
 
 
-def _get_status():
+ALL_PROJECTS = 'all'
+
+
+def _get_status(project_id):
     headers = "node_id vsn project_id lon lat address description start_timestamp " \
         "end_timestamp latest_boot_timestamp boot_id boot_media latest_rssh_timestamp " \
         "port latest_observation_timestamp status".split(" ")
 
-    cursor.execute(BASE_QUERY)
+    if project_id == ALL_PROJECTS:
+        cursor.execute(queries.STATUSES_FOR_ALL)
+    else:
+        cursor.execute(queries.STATUSES_FOR_PROJECT, {'project_id': project_id})
+
     rows = cursor.fetchall()
     conn.commit()
 
@@ -102,13 +44,14 @@ def _get_status():
         for key, value in row.items():
             if isinstance(value, datetime):
                 row[key] = arrow.get(value).to('America/Chicago').format('YYYY-MM-DD HH:mm:ss Z')
-    
+
     return rows
 
 
-@app.route("/status.csv")
-def status_csv():
-    rows = _get_status()
+@app.route('/status.csv')
+@app.route('/status/<project_id>.csv')
+def status_csv(project_id=ALL_PROJECTS):
+    rows = _get_status(project_id)
     si = StringIO()
     writer = csv.DictWriter(si, rows[0].keys())
     writer.writeheader()
@@ -120,42 +63,42 @@ def status_csv():
     return resp
 
 
-@app.route("/status.json")
-def status_json():
-    return jsonify(_get_status())
+@app.route('/status.json')
+@app.route('/status/<project_id>.json')
+def status_json(project_id=ALL_PROJECTS):
+    return jsonify(_get_status(project_id))
 
 
-@app.route("/status.geojson")
-def status_geojson():
+@app.route('/status.geojson')
+@app.route('/status/<project_id>.geojson')
+def status_geojson(project_id=ALL_PROJECTS):
     data = []
-    for obj in _get_status():
-        if obj["end_timestamp"]:
-            continue
-        lon = obj.pop("lon")
-        lat = obj.pop("lat")
+    for obj in _get_status(project_id):
+        lon = obj.pop('lon')
+        lat = obj.pop('lat')
         data.append({
-            "type": "Feature",
-            "geometry": {
-                "type": "Point",
-                "coordinates": [lon, lat]
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [lon, lat]
             },
-            "properties": obj
+            'properties': obj
         })
-    
+
     return jsonify(data)
 
 
-@app.route("/")
-def index():
-    return send_file("index.html")
+@app.route('/')
+@app.route('/<project_id>')
+def index(project_id=ALL_PROJECTS):
+    return render_template('index.html', project_id=project_id, hostname=_cfg.HOSTNAME)
 
 
-@app.route("/last-hour/<vsn>.csv")
-def last_hour(vsn):
-    cursor.execute(EXPORT_QUERY, (vsn,))
-    headers = ["node_id", "timestamp", "subsystem", "sensor", "parameter", "value_raw", "value_hrf"]
+@app.route('/export/<node_id>.csv')
+def export(node_id):
+    cursor.execute(queries.EXPORT_FOR_NODE, {'node_id': node_id})
+    headers = ['node_id', 'timestamp', 'subsystem', 'sensor', 'parameter', "value_raw", "value_hrf"]
     rows = [dict(zip(headers, row)) for row in cursor.fetchall()]
-
     conn.commit()
 
     si = StringIO()

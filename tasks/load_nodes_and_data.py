@@ -3,87 +3,128 @@
 import codecs
 import csv
 import gzip
+import logging
 import os
 import os.path
+import re
 import shutil
 import tarfile
 
 import arrow
 import psycopg2
 import requests
-from logging2 import Logger, LogLevel
 
+import utils
 from app import app
 from config import Config
 
 
-DOWNLOAD_DIRNAME    = 'downloads'
-DOWNLOAD_FILENAME   = 'AoT_Chicago.complete.tar'
-DOWNLOAD_SOURCE     = 'https://www.mcs.anl.gov/research/projects/waggle/downloads/datasets/AoT_Chicago.complete.recent.tar'
+TARBALL_LIST_PAGE   = 'https://www.mcs.anl.gov/research/projects/waggle/downloads/datasets/index.php'
 NODES_FILENAME      = 'nodes.csv'
 DATA_ZIPNAME        = 'data.csv.gz'
 DATA_FILENAME       = 'data.csv'
 
 UPSERT_NODE = """
-INSERT INTO nodes (node_id, project_id, vsn, address, lat, lon, description, start_timestamp, end_timestamp)
-VALUES (%(node_id)s, %(project_id)s, %(vsn)s, %(address)s, %(lat)s, %(lon)s, %(description)s, %(start_timestamp)s, %(end_timestamp)s)
-ON CONFLICT (node_id)
-DO UPDATE SET
-    project_id      = EXCLUDED.project_id,
-    vsn             = EXCLUDED.vsn,
-    address         = EXCLUDED.address,
-    lat             = EXCLUDED.lat,
-    lon             = EXCLUDED.lon,
-    description     = EXCLUDED.description,
-    start_timestamp = EXCLUDED.start_timestamp,
-    end_timestamp   = EXCLUDED.end_timestamp
+INSERT INTO nodes
+    (node_id, vsn, address, lat, lon, description)
+VALUES
+    (%(node_id)s, %(vsn)s, %(address)s, %(lat)s, %(lon)s, %(description)s)
+ON CONFLICT ( node_id )
+    DO UPDATE SET
+        vsn             = EXCLUDED.vsn,
+        address         = EXCLUDED.address,
+        lat             = EXCLUDED.lat,
+        lon             = EXCLUDED.lon,
+        description     = EXCLUDED.description
+"""
+
+UPSERT_PROJECT_NODE = """
+INSERT INTO projects_nodes
+    (node_id, project_id, start_timestamp, end_timestamp)
+VALUES
+    (%(node_id)s, %(project_id)s, %(start_timestamp)s, %(end_timestamp)s)
+ON CONFLICT ( node_id, project_id )
+    DO UPDATE SET
+        start_timestamp = EXCLUDED.start_timestamp,
+        end_timestamp   = EXCLUDED.end_timestamp
 """
 
 INSERT_OBSERVATION = """
-INSERT INTO observations (timestamp, node_id, subsystem, sensor, parameter, value_raw, value_hrf)
-VALUES (%(timestamp)s, %(node_id)s, %(subsystem)s, %(sensor)s, %(parameter)s, %(value_raw)s, %(value_hrf)s)
+INSERT INTO observations
+    (timestamp, node_id, subsystem, sensor, parameter, value_raw, value_hrf)
+VALUES
+    (%(timestamp)s, %(node_id)s, %(subsystem)s, %(sensor)s, %(parameter)s, %(value_raw)s, %(value_hrf)s)
+ON CONFLICT ( node_id, timestamp, subsystem, sensor, parameter )
+    DO NOTHING
 """
 
 
-@app.task
-def run():
-    # init
-    _cfg = Config()
-    conn = psycopg2.connect(_cfg.get_pg_dsn())
-    cursor = conn.cursor()
-    logger = Logger("load_nodes_and_observations", level=_cfg.LL)
+_cfg = Config()
 
-    # ensure clean download path
-    basedir = os.path.join(os.path.dirname(__file__), DOWNLOAD_DIRNAME)
+logger = logging.getLogger('load_nodes_and_data')
 
-    if os.path.exists(basedir):
-        logger.warning(f'download basedir still exists. did something error last run?')
-        logger.debug(f'removing download basedir')
-        shutil.rmtree(basedir)
+conn = psycopg2.connect(_cfg.get_pg_dsn())
+cursor = conn.cursor()
 
-    os.mkdir(basedir)
+ANL_LONLAT = (-87.981930, 41.718427)
 
+DEFAULT_LONLAT = {
+    'AoT_Chicago': (-87.623177, 41.881832),
+    'AoT_Denver': (-104.991531, 39.742043),
+    'AoT_Portland': (-122.676483, 45.523064),
+    'AoT_Syracuse': (-76.154480, 43.088947),
+    'AoT_Stanford': (-122.166077, 37.424107),
+    'AoT_Detroit': (-83.045753, 42.331429),
+    'AoT_Seattle': (-122.335167, 47.608013),
+    'AoT_NIU': (-88.767890, 41.933563),
+    'AoT_UNC': (-79.047782, 35.905043),
+    'AoT_UW': (-89.412659, 43.076388),
+    'Waggle_Tokyo': (139.839478, 35.652832),
+    'LinkNYC': (-73.935242, 40.730610),
+    'Waggle_Dronebears': ANL_LONLAT,
+    'Waggle_Others': ANL_LONLAT,
+    'NUCWR-MUGS': ANL_LONLAT,
+    'GASP': ANL_LONLAT,
+}
+
+def scrape_list_page():
+    logger.info('scraping tarball list page for download links')
+    content = utils.download(TARBALL_LIST_PAGE)
+
+    urls = set([
+        url for url in re.findall('<a\s*href=[\'|"](.*?)[\'"].*?>', content)
+        if url.endswith('.complete.recent.tar')
+    ])
+
+    logger.debug(f'{len(urls)} urls={urls}')
+    return urls
+
+
+def __check_lonlat(value):
+    return value is None or value == '' or value == 0 or value == 0.0 or value == '0' or value == '0.0'
+
+
+def process_tarball(url):
     # download tarball
     logger.info(f'downloading source tarball')
-    
-    download_filename = os.path.join(basedir, DOWNLOAD_FILENAME)
-    logger.debug(f'source={DOWNLOAD_SOURCE}')
-    logger.debug(f'download_filename={download_filename}')
 
-    res = requests.get(DOWNLOAD_SOURCE, stream=True)
-    with open(download_filename, 'wb') as fh:
-        for chunk in res.iter_content(chunk_size=1024):
-            if chunk:
-                fh.write(chunk)
+    # download the tarball
+    download_filename = utils.download(url, save_to_file=True)
 
     # extract tarball
-    logger.info('decompressing tarball')
+    basedir = os.path.join(
+        os.path.dirname(__file__),
+        'downloads')
+    logger.info(f'decompressing tarball {download_filename}')
     tarball = tarfile.open(download_filename)
-    data_dirname = tarball.getnames()[0]
+    extraction_dirname = tarball.getnames()[0]
     tarball.extractall(path=basedir)
     tarball.close()
 
-    dirname = os.path.join(basedir, data_dirname)
+    # delete the tarball
+    os.remove(download_filename)
+
+    dirname = os.path.join(basedir, extraction_dirname)
     logger.debug(f'dirname={dirname}')
 
     # rip nodes.csv
@@ -92,16 +133,24 @@ def run():
     logger.debug(f'nodes_filename={nodes_filename}')
     logger.debug(f'upsert sql template is:{UPSERT_NODE}\n')
 
-    with codecs.open(nodes_filename, 'r', encoding='utf8') as fh:
-        reader = csv.DictReader(fh)
-        for row in reader:
-            row['start_timestamp'] = arrow.get(f'{row["start_timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
-            if row['end_timestamp'] == '':
-                row['end_timestamp'] = None
-            else:
-                row['end_timestamp'] = arrow.get(f'{row["end_timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
-            logger.debug(f'{row}')
-            cursor.execute(UPSERT_NODE, row)
+    for row in utils.iter_csv(nodes_filename):
+        # fix the insane timestamps in this file
+        row['start_timestamp'] = arrow.get(f'{row["start_timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
+
+        if row['end_timestamp'] == '':
+            row['end_timestamp'] = None
+        else:
+            row['end_timestamp'] = arrow.get(f'{row["end_timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
+
+        # fix missing locations
+        if __check_lonlat(row['lon']) or __check_lonlat(row['lat']):
+            (lon, lat) = DEFAULT_LONLAT.get(row['project_id'])
+            row['lon'] = lon
+            row['lat'] = lat
+
+        # upsert node and project/node data
+        cursor.execute(UPSERT_NODE, row)
+        cursor.execute(UPSERT_PROJECT_NODE, row)
 
     conn.commit()
 
@@ -118,28 +167,25 @@ def run():
     logger.debug(f'data_filename={data_filename}')
     logger.debug(f'insert sql template is:{INSERT_OBSERVATION}\n')
 
-    with codecs.open(data_filename, 'rb', encoding='utf8') as fh:
-        reader = csv.DictReader(fh)
-        for row in reader:
-            row['timestamp'] = arrow.get(f'{row["timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
-            logger.debug(f'{row}')
-            # the unique constraint on the row will prevent us
-            # from trying to overwrite a ton on entries. the data
-            # is produced in 5 minute intervals with at least
-            # 30 minutes of back data to fill in potential gaps.
-            # ergo, most of the data in the file is totally
-            # useless most of the time.
-            try:
-                cursor.execute(INSERT_OBSERVATION, row)
-            except:
-                break
+    for row in utils.iter_csv(data_filename):
+        row['timestamp'] = arrow.get(f'{row["timestamp"]} America/Chicago', 'YYYY/MM/DD HH:mm:ss ZZZ').to('UTC').datetime
+        cursor.execute(INSERT_OBSERVATION, row)
 
     conn.commit()
 
     # clean up
     logger.info('cleaning up')
-    shutil.rmtree(basedir)
-    conn.close()
+    shutil.rmtree(dirname)
+
+
+@app.task
+def run():
+    urls = scrape_list_page()
+    for url in urls:
+        try:
+            process_tarball(url)
+        except Exception as e:
+            logger.error(f'{e}')
 
 
 if __name__ == '__main__':
